@@ -3,21 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Valutaváltó & Bevásárló Asszisztens</title>
-    <!-- Tailwind CSS a gyönyörű dizájnhoz -->
+    <title>Valutaváltó & Bevásárló Asszisztens / Currency Converter & Shopping List</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-    <!-- React és Babel a működéshez (CDN-en keresztül, hogy ne kelljen fordítani) -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <style>
-        /* Mobile webapp finomítások */
         body {
             -webkit-tap-highlight-color: transparent;
             touch-action: manipulation;
         }
         input, select {
-            font-size: 16px !important; /* Megakadályozza az iPhone automatikus zoomolását focus esetén */
+            font-size: 16px !important; /* iPhone zoom megelőzés */
         }
     </style>
 </head>
@@ -28,17 +25,62 @@
     <script type="text/babel">
         const { useState, useEffect, useMemo } = React;
 
-        // Pénznemek definíciói zászlókkal és nevekkel
+        // Pénznemek definíciói
         const CURRENCIES = {
-            HUF: { name: 'Forint', flag: '🇭🇺', symbol: 'Ft' },
-            EUR: { name: 'Euro (Ausztria)', flag: '🇪🇺', symbol: '€' },
-            PLN: { name: 'Złoty (Lengyel)', flag: '🇵🇱', symbol: 'zł' },
-            CZK: { name: 'Koruna (Cseh)', flag: '🇨🇿', symbol: 'Kč' },
-            INR: { name: 'Rupee (Indiai)', flag: '🇮🇳', symbol: '₹' }
+            HUF: { name: { hu: 'Forint', en: 'Forint' }, flag: '🇭🇺', symbol: 'Ft' },
+            EUR: { name: { hu: 'Euro (Ausztria)', en: 'Euro (Austria)' }, flag: '🇪🇺', symbol: '€' },
+            PLN: { name: { hu: 'Złoty (Lengyel)', en: 'Złoty (Polish)' }, flag: '🇵🇱', symbol: 'zł' },
+            CZK: { name: { hu: 'Koruna (Cseh)', en: 'Koruna (Czech)' }, flag: '🇨🇿', symbol: 'Kč' },
+            INR: { name: { hu: 'Rupee (Indiai)', en: 'Rupee (Indian)' }, flag: '🇮🇳', symbol: '₹' }
+        };
+
+        // Nyelvi szótár
+        const TRANSLATIONS = {
+            hu: {
+                title: 'Utazó Kalkulátor',
+                subtitle: 'Valós idejű váltás & shopping lista',
+                loading: 'Árfolyamok frissítése...',
+                errorTitle: 'Hiba történt ⚠️',
+                errorFallback: 'Hiba az árfolyamok letöltésekor',
+                retry: 'Újrapróbálkozás',
+                from: 'Honnan',
+                to: 'Hova',
+                placeholderItem: 'Tétel neve (pl. Ebéd, Ajándék)...',
+                addBtn: 'Hozzáad',
+                totalCard: 'Kosár Mindösszesen:',
+                clearList: 'Lista ürítése 🗑️',
+                confirmClear: 'Biztosan törölni szeretnéd a teljes listát?',
+                itemsTitle: 'Tételek',
+                emptyList: 'A lista még üres',
+                defaultItemName: 'tétel'
+            },
+            en: {
+                title: 'Travel Calculator',
+                subtitle: 'Real-time conversion & shopping list',
+                loading: 'Updating exchange rates...',
+                errorTitle: 'An error occurred ⚠️',
+                errorFallback: 'Failed to fetch exchange rates',
+                retry: 'Retry',
+                from: 'From',
+                to: 'To',
+                placeholderItem: 'Item name (e.g., Dinner, Gift)...',
+                addBtn: 'Add',
+                totalCard: 'Cart Grand Total:',
+                clearList: 'Clear List 🗑️',
+                confirmClear: 'Are you sure you want to clear the entire list?',
+                itemsTitle: 'Items',
+                emptyList: 'The list is empty',
+                defaultItemName: 'item'
+            }
         };
 
         function App() {
-            // Állapotok (States)
+            // Nyelv állapota (alapértelmezett a magyar, ha nincs mentve)
+            const [lang, setLang] = useState(() => {
+                const savedLang = localStorage.getItem('app_language');
+                return savedLang === 'en' || savedLang === 'hu' ? savedLang : 'hu';
+            });
+
             const [rates, setRates] = useState({});
             const [loading, setLoading] = useState(true);
             const [error, setError] = useState(null);
@@ -48,17 +90,19 @@
             const [amount, setAmount] = useState('');
             const [itemName, setItemName] = useState('');
             
-            // Bevásárlólista localStorage-ból való betöltéssel
             const [items, setItems] = useState(() => {
                 const saved = localStorage.getItem('shopping_list_items');
                 return saved ? JSON.parse(saved) : [];
             });
 
+            // Aktuális szótár rövidítése a kód tisztaságáért
+            const t = TRANSLATIONS[lang];
+
             // Árfolyamok letöltése
             useEffect(() => {
                 fetch('https://open.er-api.com/v6/latest/EUR')
                     .then(res => {
-                        if (!res.ok) throw new Error('Hiba az árfolyamok letöltésekor');
+                        if (!res.ok) throw new Error(t.errorFallback);
                         return res.json();
                     })
                     .then(data => {
@@ -69,35 +113,36 @@
                         setError(err.message);
                         setLoading(false);
                     });
-            }, []);
+            }, [lang]);
 
-            // Mentés localStorage-ba, ha változik a lista
+            // Mentések localStorage-ba
             useEffect(() => {
                 localStorage.setItem('shopping_list_items', JSON.stringify(items));
             }, [items]);
 
-            // Valós idejű váltószám számítás (EUR bázisú API miatt keresztbe váltás)
+            useEffect(() => {
+                localStorage.setItem('app_language', lang);
+            }, [lang]);
+
+            // Valutaváltás logikája
             const conversionRate = useMemo(() => {
                 if (!rates[fromCurr] || !rates[toCurr]) return 1;
-                // Átváltás: (1 / EUR_from) * EUR_to
                 return (1 / rates[fromCurr]) * rates[toCurr];
             }, [rates, fromCurr, toCurr]);
 
-            // Valós idejű átszámolt összeg
             const convertedAmount = useMemo(() => {
                 const num = parseFloat(amount);
                 if (isNaN(num)) return '0.00';
                 return (num * conversionRate).toFixed(2);
             }, [amount, conversionRate]);
 
-            // Megfordítás (Swap) gomb
             const handleSwap = () => {
+                setFromCurr(toCurr);
                 setFromCurr(toCurr);
                 setToCurr(fromCurr);
                 setAmount(convertedAmount === '0.00' ? '' : convertedAmount);
             };
 
-            // Elem hozzáadása a listához
             const handleAddItem = (e) => {
                 e.preventDefault();
                 const numAmount = parseFloat(amount);
@@ -107,7 +152,7 @@
 
                 const newItem = {
                     id: Date.now(),
-                    name: itemName.trim() || `${items.length + 1}. tétel`,
+                    name: itemName.trim() || `${items.length + 1}. ${t.defaultItemName}`,
                     fromAmount: numAmount,
                     fromCurrency: fromCurr,
                     toAmount: numConverted,
@@ -116,35 +161,27 @@
 
                 setItems([newItem, ...items]);
                 setItemName('');
-                setAmount(''); // Beviteli mező alaphelyzetbe állítása mentés után
+                setAmount('');
             };
 
-            // Elem törlése a listából
             const handleDeleteItem = (id) => {
                 setItems(items.filter(item => item.id !== id));
             };
 
-            // Lista kiürítése
             const handleClearList = () => {
-                if (confirm('Biztosan törölni szeretnéd a teljes listát?')) {
+                if (confirm(t.confirmClear)) {
                     setItems([]);
                 }
             };
 
-            // Nagy Totál Összeg számítása (Mindkét pénznemben)
-            // A könnyebbség kedvéért a jelenleg kiválasztott 'from' és 'to' pénznemek irányába összesítünk dinamikusan
             const totals = useMemo(() => {
                 let totalFrom = 0;
                 let totalTo = 0;
-
                 items.forEach(item => {
-                    // Konvertáljuk vissza az elem eredeti értékeit a jelenleg kiválasztott fő pénznemekre
-                    // Hogy a totál mindig konzisztens legyen a kiválasztott nézettel
                     const amountInEUR = item.fromAmount / rates[item.fromCurrency];
                     totalFrom += amountInEUR * rates[fromCurr];
                     totalTo += amountInEUR * rates[toCurr];
                 });
-
                 return {
                     from: isNaN(totalFrom) ? 0 : totalFrom.toFixed(2),
                     to: isNaN(totalTo) ? 0 : totalTo.toFixed(2)
@@ -154,36 +191,44 @@
             if (loading) return (
                 <div class="flex flex-col items-center justify-center min-h-screen bg-slate-900 text-emerald-400">
                     <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-emerald-400 mb-4"></div>
-                    <p class="font-medium">Árfolyamok frissítése...</p>
+                    <p class="font-medium text-sm">{t.loading}</p>
                 </div>
             );
 
             if (error) return (
                 <div class="flex flex-col items-center justify-center min-h-screen bg-slate-900 text-red-400 p-6 text-center">
-                    <p class="text-xl font-bold mb-2">Hiba történt ⚠️</p>
+                    <p class="text-xl font-bold mb-2">{t.errorTitle}</p>
                     <p class="text-sm opacity-80">{error}</p>
-                    <button onClick={() => window.location.reload()} class="mt-4 px-4 py-2 bg-slate-800 rounded-xl text-white">Újrapróbálkozás</button>
+                    <button onClick={() => window.location.reload()} class="mt-4 px-4 py-2 bg-slate-800 rounded-xl text-white min-h-[44px]">{t.retry}</button>
                 </div>
             );
 
             return (
                 <div class="w-full max-w-md mx-auto p-4 flex flex-col min-h-screen">
                     
-                    {/* FEJLÉC */}
-                    <header class="mb-4 text-center pt-2">
-                        <h1 class="text-2xl font-black bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent">
-                            Utazó Kalkulátor
-                        </h1>
-                        <p class="text-xs text-slate-400 mt-0.5">Valós idejű váltás & shopping lista</p>
+                    {/* FEJLÉC ÉS NYELVVÁLASZTÓ */}
+                    <header class="mb-4 flex justify-between items-start pt-2 px-1">
+                        <div class="text-left">
+                            <h1 class="text-2xl font-black bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent">
+                                {t.title}
+                            </h1>
+                            <p class="text-[11px] text-slate-400 mt-0.5">{t.subtitle}</p>
+                        </div>
+                        
+                        {/* NYELV VÁLTÓ GOMB */}
+                        <button 
+                            onClick={() => setLang(lang === 'hu' ? 'en' : 'hu')}
+                            class="bg-slate-800 hover:bg-slate-700 active:scale-95 border border-slate-700 rounded-xl px-3 py-1.5 text-xs font-black tracking-wider shadow-sm flex items-center gap-1 min-h-[44px]"
+                        >
+                            {lang === 'hu' ? '🇬🇧 EN' : '🇭🇺 HU'}
+                        </button>
                     </header>
 
-                    {/* FŐ VALUTAVÁLTÓ KÁRTYA */}
+                    {/* VALUTAVÁLTÓ */}
                     <div class="bg-slate-800 rounded-2xl p-4 shadow-xl border border-slate-700/50 mb-4">
-                        
-                        {/* Pénznem választók sor */}
                         <div class="flex items-center justify-between gap-2 mb-4">
                             <div class="flex-1 bg-slate-700/40 rounded-xl p-1.5 border border-slate-700">
-                                <label class="block text-[10px] font-bold text-emerald-400 uppercase tracking-wider pl-2 mb-0.5">Honnan</label>
+                                <label class="block text-[10px] font-bold text-emerald-400 uppercase tracking-wider pl-2 mb-0.5">{t.from}</label>
                                 <select 
                                     value={fromCurr} 
                                     onChange={(e) => setFromCurr(e.target.value)}
@@ -197,18 +242,16 @@
                                 </select>
                             </div>
 
-                            {/* Swap gomb */}
                             <button 
                                 onClick={handleSwap}
                                 type="button"
-                                class="w-11 h-11 flex items-center justify-center bg-slate-700 hover:bg-slate-600 active:scale-95 transition-all rounded-full border border-slate-600 shadow-md shrink-0"
-                                aria-label="Pénznemek megfordítása"
+                                class="w-11 h-11 flex items-center justify-center bg-slate-700 hover:bg-slate-600 active:scale-95 transition-all rounded-full border border-slate-600 shadow-md shrink-0 text-base"
                             >
                                 🔄
                             </button>
 
                             <div class="flex-1 bg-slate-700/40 rounded-xl p-1.5 border border-slate-700">
-                                <label class="block text-[10px] font-bold text-teal-400 uppercase tracking-wider pl-2 mb-0.5">Hova</label>
+                                <label class="block text-[10px] font-bold text-teal-400 uppercase tracking-wider pl-2 mb-0.5">{t.to}</label>
                                 <select 
                                     value={toCurr} 
                                     onChange={(e) => setToCurr(e.target.value)}
@@ -223,7 +266,6 @@
                             </div>
                         </div>
 
-                        {/* Számológép-szerű Beviteli és Kijelző Mezők */}
                         <div class="space-y-3">
                             <div class="relative bg-slate-900 rounded-xl p-3 border border-slate-700 flex items-center justify-between">
                                 <input 
@@ -246,91 +288,88 @@
                                 )}
                             </div>
 
-                            {/* Automatikus Élő Eredmény Kijelző */}
                             <div class="bg-gradient-to-r from-emerald-950/40 to-teal-950/40 border border-emerald-500/20 rounded-xl p-3 flex items-center justify-between min-h-[58px]">
                                 <div class="text-2xl font-black text-emerald-400 overflow-x-auto whitespace-nowrap scrollbar-none">
-                                    {Number(convertedAmount).toLocaleString('hu-HU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    {Number(convertedAmount).toLocaleString(lang === 'hu' ? 'hu-HU' : 'en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </div>
                                 <span class="text-xl font-bold text-emerald-400 shrink-0 ml-2">{CURRENCIES[toCurr].symbol}</span>
                             </div>
                         </div>
 
-                        {/* Kosárhoz adás szekció */}
                         <form onSubmit={handleAddItem} class="mt-4 pt-3 border-t border-slate-700/60 flex gap-2">
                             <input 
                                 type="text" 
-                                placeholder="Tétel neve (pl. Ebéd, Ajándék)..."
+                                placeholder={t.placeholderItem}
                                 value={itemName}
                                 onChange={(e) => setItemName(e.target.value)}
-                                class="flex-1 bg-slate-900 rounded-xl px-3 py-2 text-sm border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
+                                class="flex-1 bg-slate-900 rounded-xl px-3 py-2 text-sm border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
                             />
                             <button 
                                 type="submit"
                                 disabled={!amount || parseFloat(amount) <= 0}
                                 class="bg-gradient-to-r from-emerald-500 to-teal-500 disabled:from-slate-700 disabled:to-slate-700 text-slate-950 disabled:text-slate-500 font-bold px-4 py-2 rounded-xl text-sm transition-all active:scale-95 shrink-0 flex items-center justify-center min-w-[44px] min-h-[44px]"
                             >
-                                ➕ Hozzáad
+                                ➕ {t.addBtn}
                             </button>
                         </form>
                     </div>
 
-                    {/* FŐ TOTÁL KÁRTYA (Mindig látható ha van elem) */}
+                    {/* NAGY TOTÁL */}
                     {items.length > 0 && (
                         <div class="bg-gradient-to-br from-slate-800 to-slate-800/90 rounded-2xl p-4 shadow-lg border-2 border-emerald-500/30 mb-4">
                             <div class="flex justify-between items-center mb-1">
-                                <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Kosár Mindösszesen:</span>
+                                <span class="text-xs font-bold uppercase tracking-wider text-slate-400">{t.totalCard}</span>
                                 <button onClick={handleClearList} class="text-xs text-red-400 hover:underline min-h-[44px] px-2 flex items-center">
-                                    Lista ürítése 🗑️
+                                    {t.clearList}
                                 </button>
                             </div>
                             <div class="grid grid-cols-2 gap-2 text-center pt-1">
                                 <div class="bg-slate-900/60 rounded-xl p-2 border border-slate-700/50">
-                                    <div class="text-xs text-slate-400">{CURRENCIES[fromCurr].name}</div>
+                                    <div class="text-xs text-slate-400">{CURRENCIES[fromCurr].name[lang]}</div>
                                     <div class="text-lg font-black text-white">
-                                        {Number(totals.from).toLocaleString('hu-HU')} {CURRENCIES[fromCurr].symbol}
+                                        {Number(totals.from).toLocaleString(lang === 'hu' ? 'hu-HU' : 'en-US')} {CURRENCIES[fromCurr].symbol}
                                     </div>
                                 </div>
                                 <div class="bg-emerald-950/30 rounded-xl p-2 border border-emerald-500/20">
-                                    <div class="text-xs text-emerald-400">{CURRENCIES[toCurr].name}</div>
+                                    <div class="text-xs text-emerald-400">{CURRENCIES[toCurr].name[lang]}</div>
                                     <div class="text-lg font-black text-emerald-400">
-                                        {Number(totals.to).toLocaleString('hu-HU')} {CURRENCIES[toCurr].symbol}
+                                        {Number(totals.to).toLocaleString(lang === 'hu' ? 'hu-HU' : 'en-US')} {CURRENCIES[toCurr].symbol}
                                     </div>
                                 </div>
                             </div>
                         </div>
                     )}
 
-                    {/* BEVÁSÁRLÓLISTA TÉTELEI */}
+                    {/* LISTA TÉTELEI */}
                     <div class="flex-1 flex flex-col">
                         <h2 class="text-sm font-bold text-slate-400 mb-2 px-1 flex justify-between items-center">
-                            <span>Tételek ({items.length})</span>
-                            {items.length === 0 && <span class="text-xs font-normal italic">A lista még üres</span>}
+                            <span>{t.itemsTitle} ({items.length})</span>
+                            {items.length === 0 && <span class="text-xs font-normal italic">{t.emptyList}</span>}
                         </h2>
 
                         <div class="space-y-2 overflow-y-auto max-h-[40vh] pr-1 pb-6">
                             {items.map((item) => (
                                 <div 
                                     key={item.id} 
-                                    class="bg-slate-800/60 hover:bg-slate-800 rounded-xl p-3 border border-slate-700/40 flex items-center justify-between gap-2 transition-colors animate-fadeIn"
+                                    class="bg-slate-800/60 rounded-xl p-3 border border-slate-700/40 flex items-center justify-between gap-2"
                                 >
                                     <div class="flex-1 min-w-0">
                                         <div class="font-bold text-white text-sm truncate mb-0.5">{item.name}</div>
                                         <div class="text-xs text-slate-400 flex items-center gap-1.5 flex-wrap">
                                             <span class="bg-slate-900 px-1.5 py-0.5 rounded text-slate-300 font-medium">
-                                                {item.fromAmount.toLocaleString('hu-HU')} {CURRENCIES[item.fromCurrency]?.symbol}
+                                                {item.fromAmount.toLocaleString(lang === 'hu' ? 'hu-HU' : 'en-US')} {CURRENCIES[item.fromCurrency]?.symbol}
                                             </span>
                                             <span>➡️</span>
                                             <span class="bg-emerald-950/80 px-1.5 py-0.5 rounded text-emerald-400 font-bold">
-                                                {item.toAmount.toLocaleString('hu-HU')} {CURRENCIES[item.toCurrency]?.symbol}
+                                                {item.toAmount.toLocaleString(lang === 'hu' ? 'hu-HU' : 'en-US')} {CURRENCIES[item.toCurrency]?.symbol}
                                             </span>
                                         </div>
                                     </div>
                                     
-                                    {/* Törlés gomb */}
                                     <button 
                                         onClick={() => handleDeleteItem(item.id)}
-                                        class="w-11 h-11 flex items-center justify-center text-slate-500 hover:text-red-400 active:scale-95 transition-all shrink-0 rounded-full hover:bg-slate-700/50"
-                                        aria-label="Törlés"
+                                        class="w-11 h-11 flex items-center justify-center text-slate-500 hover:text-red-400 rounded-full hover:bg-slate-700/50"
+                                        aria-label="Delete"
                                     >
                                         ❌
                                     </button>
